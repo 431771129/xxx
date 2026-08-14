@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>智慧学习乐园</title>
+  <!-- 引入 Tailwind CSS 库 -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .card-bounce { transition: transform 0.2s; }
+    .card-bounce:active { transform: scale(0.95); }
+  </style>
+</head>
+<body class="bg-amber-50 min-h-screen text-slate-800 pb-10">
+
+  <!-- 1. 顶部导航栏 -->
+  <header class="bg-amber-400 p-4 shadow-md flex justify-between items-center sticky top-0 z-10">
+    <div class="flex items-center space-x-2">
+      <span class="text-2xl">🎈</span>
+      <h1 class="text-xl font-bold text-amber-900">智慧学习乐园</h1>
+      <span id="gradeBadge" class="bg-amber-100 text-amber-800 text-xs px-2 py-1 rounded-full font-bold">加载中...</span>
+    </div>
+    
+    <div class="flex items-center space-x-4">
+      <!-- 星星计数器 -->
+      <div class="bg-white/80 px-3 py-1 rounded-full flex items-center space-x-1 shadow-sm">
+        <span class="text-xl">⭐</span>
+        <span id="starCount" class="font-extrabold text-amber-600 text-lg">0</span>
+      </div>
+      <!-- 家长入口按钮 -->
+      <button onclick="openParentModal()" class="bg-amber-600 hover:bg-amber-700 text-white text-xs px-3 py-2 rounded-lg font-bold shadow">
+        🔒 家长模式
+      </button>
+    </div>
+  </header>
+
+  <!-- 2. 主体内容区域 -->
+  <main class="max-w-4xl mx-auto p-4">
+    <!-- 模块切换 Tab -->
+    <div class="flex justify-center space-x-2 mb-6">
+      <button onclick="switchTab('poem')" id="tab-poem" class="tab-btn px-4 py-2 rounded-xl font-bold bg-amber-500 text-white shadow">📜 古诗词</button>
+      <button onclick="switchTab('english')" id="tab-english" class="tab-btn px-4 py-2 rounded-xl font-bold bg-white text-amber-700 shadow">🔤 英语句库</button>
+      <button onclick="switchTab('tasks')" id="tab-tasks" class="tab-btn px-4 py-2 rounded-xl font-bold bg-white text-amber-700 shadow">✅ 今日打卡</button>
+    </div>
+
+    <!-- 动态展示列表 -->
+    <div id="contentArea" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="col-span-full text-center py-10 text-slate-400">正在同步云端内容...</div>
+    </div>
+  </main>
+
+  <!-- 3. 家长模式安全验证锁 Modal -->
+  <div id="parentModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden flex items-center justify-center z-50">
+    <div class="bg-white p-6 rounded-2xl max-w-sm w-full mx-4 shadow-xl">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg font-bold text-slate-700">🔒 家长验证</h3>
+        <button onclick="closeParentModal()" class="text-slate-400 text-xl font-bold">&times;</button>
+      </div>
+      
+      <!-- 算式验证阶段 -->
+      <div id="lockSection">
+        <p class="text-sm text-slate-500 mb-4">请计算以下算式以解锁后台：</p>
+        <div id="mathQuestion" class="text-2xl font-bold text-center bg-slate-100 py-3 rounded-xl mb-4 text-amber-600"></div>
+        <input type="number" id="lockAnswer" placeholder="请输入答案" class="w-full border-2 border-slate-200 p-2 rounded-xl text-center mb-4 text-lg focus:outline-none focus:border-amber-400">
+        <button onclick="verifyParentLock()" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 rounded-xl shadow">确认解锁</button>
+      </div>
+
+      <!-- 解锁后的家长控制面板 -->
+      <div id="parentConsole" class="hidden space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-500 mb-1">切换孩子当前学习阶段：</label>
+          <select id="gradeSelect" onchange="updateGrade(this.value)" class="w-full border p-2 rounded-lg text-sm bg-slate-50">
+            <option value="preschool">幼升小准备</option>
+            <option value="grade_1">一年级</option>
+            <option value="grade_2">二年级</option>
+            <option value="grade_3">三年级</option>
+          </select>
+        </div>
+
+        <hr class="border-slate-100">
+
+        <div>
+          <label class="block text-xs font-bold text-slate-500 mb-1">新增打卡任务：</label>
+          <div class="flex space-x-2">
+            <input type="text" id="newTaskName" placeholder="如：整理书桌" class="flex-1 border p-2 rounded-lg text-sm">
+            <input type="number" id="newTaskStars" value="2" class="w-16 border p-2 rounded-lg text-sm text-center">
+            <button onclick="addCustomTask()" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg font-bold text-sm">添加</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. 前端交互逻辑 -->
+  <script>
+    // ⚠️ 今后部署 Worker 后，请将此处替换为实际的 Cloudflare Worker 网址
+    const API_BASE = "https://kids-api.xxx.workers.dev";
+
+    let currentProfile = {};
+    let currentTab = 'poem';
+    let lockAnswerCorrect = 0;
+
+    // 初始化加载
+    async function init() {
+      await fetchProfile();
+      loadTabContent();
+    }
+
+    // 获取用户基本配置
+    async function fetchProfile() {
+      try {
+        const res = await fetch(`${API_BASE}/api/profile`);
+        currentProfile = await res.json();
+        document.getElementById('starCount').innerText = currentProfile.stars || 0;
+        
+        const gradeMap = { 'preschool': '幼升小', 'grade_1': '一年级', 'grade_2': '二年级', 'grade_3': '三年级' };
+        document.getElementById('gradeBadge').innerText = gradeMap[currentProfile.current_grade] || '未设置';
+        document.getElementById('gradeSelect').value = currentProfile.current_grade || 'preschool';
+      } catch(e) {
+        console.warn("API 尚未部署或连接失败，当前为静态预览模式");
+      }
+    }
+
+    // 切换 Tab 标签
+    function switchTab(tab) {
+      currentTab = tab;
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.className = "tab-btn px-4 py-2 rounded-xl font-bold bg-white text-amber-700 shadow";
+      });
+      document.getElementById(`tab-${tab}`).className = "tab-btn px-4 py-2 rounded-xl font-bold bg-amber-500 text-white shadow";
+      loadTabContent();
+    }
+
+    // 动态拉取并展示内容
+    async function loadTabContent() {
+      const container = document.getElementById('contentArea');
+      container.innerHTML = `<div class="col-span-full text-center py-10 text-slate-400">正在读取数据...</div>`;
+
+      // 1. 打卡任务列表
+      if (currentTab === 'tasks') {
+        try {
+          const res = await fetch(`${API_BASE}/api/tasks`);
+          const tasks = await res.json();
+          container.innerHTML = tasks.map(t => `
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-amber-100 flex justify-between items-center">
+              <div>
+                <div class="font-bold text-slate-800">${t.task_name}</div>
+                <div class="text-xs text-amber-600 font-bold">奖励 +${t.reward_stars} ⭐</div>
+              </div>
+              <button onclick="completeTask(${t.reward_stars})" class="bg-amber-400 hover:bg-amber-500 text-amber-900 font-bold px-4 py-2 rounded-xl text-sm card-bounce">
+                打卡
+              </button>
+            </div>
+          `).join('');
+        } catch(e) {
+          container.innerHTML = `<div class="col-span-full text-center py-10 text-slate-400">请部署 API 后查看真实任务数据</div>`;
+        }
+        return;
+      }
+
+      // 2. 知识库（古诗 / 英语）
+      try {
+        const res = await fetch(`${API_BASE}/api/library?type=${currentTab}&grade=${currentProfile.current_grade || 'preschool'}`);
+        const list = await res.json();
+
+        if (!list || list.length === 0) {
+          container.innerHTML = `<div class="col-span-full text-center py-10 text-slate-400">当前阶段暂无更多内容</div>`;
+          return;
+        }
+
+        container.innerHTML = list.map(item => {
+          const extra = item.extra_info ? JSON.parse(item.extra_info) : {};
+          return `
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-amber-100 flex flex-col justify-between">
+              <div>
+                <div class="flex justify-between items-start mb-2">
+                  <h3 class="text-xl font-bold text-amber-900">${item.title}</h3>
+                  <span class="text-xs text-slate-400">${extra.author || extra.icon || ''}</span>
+                </div>
+                <p class="text-slate-600 leading-relaxed text-sm mb-3">${item.content}</p>
+                ${extra.explain ? `<p class="text-xs bg-amber-50 p-2 rounded-lg text-amber-800">💡 译文：${extra.explain}</p>` : ''}
+              </div>
+              <button onclick="speak('${item.title}。${item.content.replace(/<br>/g, '')}')" class="mt-4 bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold py-2 rounded-xl text-sm flex items-center justify-center space-x-1">
+                <span>🔊</span> <span>朗读声音</span>
+              </button>
+            </div>
+          `;
+        }).join('');
+      } catch(e) {
+        container.innerHTML = `<div class="col-span-full text-center py-10 text-slate-400">请部署 API 后查看真实知识库数据</div>`;
+      }
+    }
+
+    // 语音朗读 TTS 引擎
+    function speak(text) {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const msg = new SpeechSynthesisUtterance(text);
+        msg.rate = currentProfile.speech_rate || 0.9;
+        msg.pitch = currentProfile.speech_pitch || 1.0;
+        window.speechSynthesis.speak(msg);
+      } else {
+        alert("当前浏览器不支持语音合成功能");
+      }
+    }
+
+    // 完成打卡领星星
+    async function completeTask(stars) {
+      const newStars = (currentProfile.stars || 0) + stars;
+      await fetch(`${API_BASE}/api/profile`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ stars: newStars })
+      });
+      fetchProfile();
+      alert(`🎉 恭喜完成打卡，获得 ${stars} 颗星星！`);
+    }
+
+    // 家长门禁弹窗控制
+    function openParentModal() {
+      const num1 = Math.floor(Math.random() * 8) + 2;
+      const num2 = Math.floor(Math.random() * 8) + 2;
+      lockAnswerCorrect = num1 * num2;
+      document.getElementById('mathQuestion').innerText = `${num1} × ${num2} = ?`;
+      document.getElementById('lockAnswer').value = '';
+      document.getElementById('lockSection').classList.remove('hidden');
+      document.getElementById('parentConsole').classList.add('hidden');
+      document.getElementById('parentModal').classList.remove('hidden');
+    }
+
+    function closeParentModal() {
+      document.getElementById('parentModal').classList.add('hidden');
+    }
+
+    function verifyParentLock() {
+      const ans = parseInt(document.getElementById('lockAnswer').value);
+      if (ans === lockAnswerCorrect) {
+        document.getElementById('lockSection').classList.add('hidden');
+        document.getElementById('parentConsole').classList.remove('hidden');
+      } else {
+        alert("答案不正确，请重新计算！");
+      }
+    }
+
+    // 切换学习阶段/年级
+    async function updateGrade(grade) {
+      await fetch(`${API_BASE}/api/profile`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ current_grade: grade })
+      });
+      await fetchProfile();
+      loadTabContent();
+    }
+
+    // 新增打卡任务
+    async function addCustomTask() {
+      const name = document.getElementById('newTaskName').value;
+      const stars = parseInt(document.getElementById('newTaskStars').value);
+      if (!name) return;
+
+      await fetch(`${API_BASE}/api/tasks`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ task_name: name, reward_stars: stars })
+      });
+
+      document.getElementById('newTaskName').value = '';
+      alert('新增任务成功！');
+      if (currentTab === 'tasks') loadTabContent();
+    }
+
+    init();
+  </script>
+</body>
+</html>
