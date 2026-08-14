@@ -21,7 +21,7 @@
     </div>
     
     <div class="flex items-center space-x-3">
-      <!-- 星星数 (默认0) -->
+      <!-- 星星数 -->
       <div class="bg-white/90 px-3 py-1 rounded-full flex items-center space-x-1 shadow-inner">
         <span class="text-lg">⭐</span>
         <span id="starCount" class="font-black text-amber-600 text-base">0</span>
@@ -33,28 +33,28 @@
     </div>
   </header>
 
-  <!-- 2. 语音调校调音台 -->
+  <!-- 2. 语音调校调音台 (增加自动保存事件) -->
   <div class="max-w-4xl mx-auto px-4 pt-4">
     <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between text-xs text-slate-500">
       <span class="font-bold text-slate-700 flex items-center">🔊 语音设置：</span>
       <div class="flex items-center space-x-3">
         <span>语速</span>
-        <input type="range" id="rateSlider" min="0.5" max="1.5" step="0.1" value="0.9" class="w-20 accent-amber-500">
+        <input type="range" id="rateSlider" min="0.5" max="1.5" step="0.1" value="0.9" onchange="saveTTSConfig()" class="w-20 accent-amber-500">
         <span>音调</span>
-        <input type="range" id="pitchSlider" min="0.5" max="1.5" step="0.1" value="1.0" class="w-20 accent-amber-500">
+        <input type="range" id="pitchSlider" min="0.5" max="1.5" step="0.1" value="1.0" onchange="saveTTSConfig()" class="w-20 accent-amber-500">
       </div>
     </div>
   </div>
 
-  <!-- 3. 主导航标签栏 -->
+  <!-- 3. 主导航标签栏 (修复样式统一) -->
   <main class="max-w-4xl mx-auto p-4">
     <div class="flex flex-wrap gap-2 justify-center mb-5">
-      <button onclick="switchTab('pinyin')" id="tab-pinyin" class="tab-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-500 text-white shadow">💬 拼音卡片</button>
+      <button onclick="switchTab('pinyin')" id="tab-pinyin" class="tab-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-white text-slate-600 shadow">💬 拼音卡片</button>
       <button onclick="switchTab('alphabet')" id="tab-alphabet" class="tab-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-white text-slate-600 shadow">🔤 英文字母</button>
       <button onclick="switchTab('english')" id="tab-english" class="tab-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-white text-slate-600 shadow">📖 英语词句</button>
       <button onclick="switchTab('poem')" id="tab-poem" class="tab-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-white text-slate-600 shadow">📜 经典古诗</button>
       <button onclick="switchTab('tasks')" id="tab-tasks" class="tab-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-white text-slate-600 shadow">✅ 今日打卡</button>
-      <button onclick="switchTab('rewards')" id="tab-rewards" class="tab-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-500 text-white shadow">🎁 奖励中心</button>
+      <button onclick="switchTab('rewards')" id="tab-rewards" class="tab-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-white text-slate-600 shadow">🎁 奖励中心</button>
     </div>
 
     <!-- 换一组控制栏 -->
@@ -122,15 +122,15 @@
   </div>
 
   <script>
-    // 可选填：若部署了 Cloudflare Worker 可填入真实地址
-    const API_BASE = "https://kids-api.crimson-tree-495d.workers.dev/";
+    // 可选：如果部署了 Worker，填入 API 地址。代码会自动在“远程云端”和“本地模式”间优雅切换！
+    const API_BASE = "";
 
-    // 本地默认状态数据
-    let localProfile = { stars: 0, current_grade: 'preschool' };
+    let localProfile = { stars: 0, current_grade: 'preschool', speech_rate: 0.9, speech_pitch: 1.0 };
     let currentTab = 'pinyin';
     let lockAnswerCorrect = 0;
+    let lastPoemTitle = "";
 
-    // 内置本地离线完整数据库（保证无后端也能完美运行）
+    // 本地默认全套内置数据 (带年级标识)
     const LOCAL_DATA = {
       pinyin: [
         {title:'a', content:'阿姨'}, {title:'o', content:'噢噢'}, {title:'e', content:'白鹅'},
@@ -156,16 +156,19 @@
         {title:'Y', content:'Yacht', cn:'游艇'}, {title:'Z', content:'Zebra', cn:'斑马'}
       ],
       english: [
-        {title:'Red & Blue', content:'红色和蓝色', icon:'🎨'},
-        {title:'One, Two, Three', content:'一、二、三', icon:'🔢'},
-        {title:'Good morning!', content:'早上好！', icon:'🌅'},
-        {title:'I love my family.', content:'我爱我的家庭。', icon:'👨‍👩‍👧'}
+        {grade:'preschool', title:'Red & Blue', content:'红色和蓝色', icon:'🎨'},
+        {grade:'preschool', title:'One, Two, Three', content:'一、二、三', icon:'🔢'},
+        {grade:'grade_1', title:'Good morning!', content:'早上好！', icon:'🌅'},
+        {grade:'grade_1', title:'I love my family.', content:'我爱我的家庭。', icon:'👨‍👩‍👧'},
+        {grade:'grade_2', title:'What is your name?', content:'你叫什么名字？', icon:'❓'},
+        {grade:'grade_3', title:'Practice makes perfect.', content:'熟能生巧。', icon:'🌟'}
       ],
       poem: [
-        {title:'咏鹅', author:'[唐] 骆宾王', content:'鹅，鹅，鹅，曲项向天歌。<br>白毛浮绿水，红掌拨清波。', explain:'描绘了鹅在水中欢快游玩的情景。'},
-        {title:'悯农', author:'[唐] 李绅', content:'锄禾日当午，汗滴禾下土。<br>谁知盘中餐，粒粒皆辛苦。', explain:'体会农民伯伯种粮食的辛苦。'},
-        {title:'静夜思', author:'[唐] 李白', content:'床前明月光，疑是地上霜。<br>举头望明月，低头思故乡。', explain:'表达对家乡和亲人的思念。'},
-        {title:'春晓', author:'[唐] 孟浩然', content:'春眠不觉晓，处处闻啼鸟。<br>夜来风雨声，花落知多少。', explain:'描写春天早晨美好的景色。'}
+        {grade:'preschool', title:'咏鹅', author:'[唐] 骆宾王', content:'鹅，鹅，鹅，曲项向天歌。<br>白毛浮绿水，红掌拨清波。', explain:'描绘了鹅在水中欢快游玩的情景。'},
+        {grade:'preschool', title:'春晓', author:'[唐] 孟浩然', content:'春眠不觉晓，处处闻啼鸟。<br>夜来风雨声，花落知多少。', explain:'描写春天早晨美好的景色。'},
+        {grade:'grade_1', title:'悯农', author:'[唐] 李绅', content:'锄禾日当午，汗滴禾下土。<br>谁知盘中餐，粒粒皆辛苦。', explain:'体会农民伯伯种粮食的辛苦。'},
+        {grade:'grade_1', title:'静夜思', author:'[唐] 李白', content:'床前明月光，疑是地上霜。<br>举头望明月，低头思故乡。', explain:'表达对家乡和亲人的思念。'},
+        {grade:'grade_2', title:'登鹳雀楼', author:'[唐] 王之涣', content:'白日依山尽，黄河入海流。<br>欲穷千里目，更上一层楼。', explain:'意境宽广，鼓励人不断进取。'}
       ],
       tasks: [
         {id:1, task_name:'📖 朗读5个拼音/字母卡片', reward_stars:2},
@@ -181,12 +184,18 @@
     };
 
     function init() {
-      // 从 localStorage 读取本地星星数与阶段
-      const saved = localStorage.getItem('kids_profile');
-      if (saved) localProfile = JSON.parse(saved);
+      // 1. 从 localStorage 读取设置
+      const savedProfile = localStorage.getItem('kids_profile');
+      if (savedProfile) {
+        localProfile = Object.assign(localProfile, JSON.parse(savedProfile));
+      }
+
+      // 2. 初始化 slider 记忆值
+      document.getElementById('rateSlider').value = localProfile.speech_rate || 0.9;
+      document.getElementById('pitchSlider').value = localProfile.speech_pitch || 1.0;
 
       updateHeaderUI();
-      loadTabContent();
+      switchTab('pinyin'); // 统一通过 switchTab 初始化高亮
     }
 
     function updateHeaderUI() {
@@ -203,13 +212,22 @@
       updateHeaderUI();
     }
 
+    function saveTTSConfig() {
+      localProfile.speech_rate = parseFloat(document.getElementById('rateSlider').value);
+      localProfile.speech_pitch = parseFloat(document.getElementById('pitchSlider').value);
+      saveProfile();
+    }
+
     function switchTab(tab) {
       currentTab = tab;
       document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.className = "tab-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-white text-slate-600 shadow";
       });
       const activeBtn = document.getElementById(`tab-${tab}`);
-      if(activeBtn) activeBtn.className = "tab-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-500 text-white shadow";
+      if(activeBtn) {
+        const activeBg = tab === 'rewards' ? 'bg-rose-500' : 'bg-amber-500';
+        activeBtn.className = `tab-btn px-3 py-1.5 rounded-xl text-xs font-bold ${activeBg} text-white shadow`;
+      }
 
       const refreshBar = document.getElementById('refreshBar');
       if (tab === 'poem' || tab === 'english') {
@@ -221,38 +239,38 @@
       loadTabContent();
     }
 
-    function loadTabContent() {
+    async function loadTabContent() {
       const container = document.getElementById('contentArea');
 
-      // 1. 拼音卡片 (1:1 绿框)
+      // 尝试发起 API 调取 (如未配置则切换到本地)
+      if (API_BASE) {
+        try {
+          if (currentTab === 'pinyin') {
+            const res = await fetch(`${API_BASE}/api/library?type=pinyin`);
+            const list = await res.json();
+            renderPinyin(container, list); return;
+          }
+          if (currentTab === 'alphabet') {
+            const res = await fetch(`${API_BASE}/api/library?type=alphabet`);
+            const list = await res.json();
+            renderAlphabet(container, list); return;
+          }
+        } catch(e) {
+          console.warn("远程 API 连接失败，回退到本地离线数据模式");
+        }
+      }
+
+      // --- 本地渲染逻辑 ---
       if (currentTab === 'pinyin') {
-        container.className = "grid grid-cols-3 gap-3";
-        container.innerHTML = LOCAL_DATA.pinyin.map(item => `
-          <div onclick="speak('${item.title}，${item.content}')" class="bg-white p-3 rounded-2xl border-2 border-emerald-400 text-center shadow-sm card-bounce cursor-pointer flex flex-col justify-center items-center">
-            <div class="text-2xl font-black text-emerald-600">${item.title}</div>
-            <div class="text-xs text-slate-500 mt-1 font-bold">${item.content}</div>
-          </div>
-        `).join('');
-        return;
-      }
-
-      // 2. 26个英文字母 (1:1 橙框)
-      if (currentTab === 'alphabet') {
-        container.className = "grid grid-cols-3 gap-3";
-        container.innerHTML = LOCAL_DATA.alphabet.map(item => `
-          <div onclick="speak('${item.title}, ${item.content}')" class="bg-white p-3 rounded-2xl border-2 border-amber-400 text-center shadow-sm card-bounce cursor-pointer flex flex-col justify-center items-center">
-            <div class="text-2xl font-black text-rose-500">${item.title}</div>
-            <div class="text-xs font-bold text-slate-800">${item.content}</div>
-            <div class="text-[10px] text-slate-400">${item.cn}</div>
-          </div>
-        `).join('');
-        return;
-      }
-
-      // 3. 英语词句
-      if (currentTab === 'english') {
+        renderPinyin(container, LOCAL_DATA.pinyin);
+      } else if (currentTab === 'alphabet') {
+        renderAlphabet(container, LOCAL_DATA.alphabet);
+      } else if (currentTab === 'english') {
+        // 根据年级筛选
+        const list = LOCAL_DATA.english.filter(i => i.grade === localProfile.current_grade || localProfile.current_grade === 'preschool');
+        const showList = list.length ? list : LOCAL_DATA.english;
         container.className = "grid grid-cols-1 md:grid-cols-2 gap-4";
-        container.innerHTML = LOCAL_DATA.english.map(item => `
+        container.innerHTML = showList.map(item => `
           <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center">
             <div>
               <div class="text-lg font-bold text-slate-800">${item.title} ${item.icon || ''}</div>
@@ -263,12 +281,17 @@
             </button>
           </div>
         `).join('');
-        return;
-      }
+      } else if (currentTab === 'poem') {
+        // 根据年级筛选古诗
+        let pool = LOCAL_DATA.poem.filter(p => p.grade === localProfile.current_grade);
+        if (!pool.length) pool = LOCAL_DATA.poem; // 无对应年级时展示全部
 
-      // 4. 古诗词 (支持换一组随机切换)
-      if (currentTab === 'poem') {
-        const item = LOCAL_DATA.poem[Math.floor(Math.random() * LOCAL_DATA.poem.length)];
+        // 避免连续随机到同一首诗
+        let candidates = pool.filter(p => p.title !== lastPoemTitle);
+        if (!candidates.length) candidates = pool;
+        const item = candidates[Math.floor(Math.random() * candidates.length)];
+        lastPoemTitle = item.title;
+
         container.className = "block";
         container.innerHTML = `
           <div class="bg-white p-5 rounded-2xl shadow-sm border border-amber-100">
@@ -283,13 +306,13 @@
             </button>
           </div>
         `;
-        return;
-      }
+      } else if (currentTab === 'tasks') {
+        // 读取持久化保存的任务列表
+        const customTasks = JSON.parse(localStorage.getItem('kids_custom_tasks') || '[]');
+        const allTasks = [...LOCAL_DATA.tasks, ...customTasks];
 
-      // 5. 今日打卡
-      if (currentTab === 'tasks') {
         container.className = "space-y-3";
-        container.innerHTML = LOCAL_DATA.tasks.map(t => `
+        container.innerHTML = allTasks.map(t => `
           <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center">
             <div>
               <div class="font-bold text-slate-800 text-sm">${t.task_name}</div>
@@ -300,11 +323,7 @@
             </button>
           </div>
         `).join('');
-        return;
-      }
-
-      // 6. 奖励中心
-      if (currentTab === 'rewards') {
+      } else if (currentTab === 'rewards') {
         container.className = "grid grid-cols-2 gap-3";
         container.innerHTML = LOCAL_DATA.rewards.map(r => `
           <div class="bg-white p-4 rounded-2xl border border-amber-100 text-center shadow-sm flex flex-col items-center justify-between">
@@ -317,6 +336,28 @@
           </div>
         `).join('');
       }
+    }
+
+    // 辅助渲染函数
+    function renderPinyin(container, list) {
+      container.className = "grid grid-cols-3 gap-3";
+      container.innerHTML = list.map(item => `
+        <div onclick="speak('${item.title}，${item.content}')" class="bg-white p-3 rounded-2xl border-2 border-emerald-400 text-center shadow-sm card-bounce cursor-pointer flex flex-col justify-center items-center">
+          <div class="text-2xl font-black text-emerald-600">${item.title}</div>
+          <div class="text-xs text-slate-500 mt-1 font-bold">${item.content}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderAlphabet(container, list) {
+      container.className = "grid grid-cols-3 gap-3";
+      container.innerHTML = list.map(item => `
+        <div onclick="speak('${item.title}, ${item.content}')" class="bg-white p-3 rounded-2xl border-2 border-amber-400 text-center shadow-sm card-bounce cursor-pointer flex flex-col justify-center items-center">
+          <div class="text-2xl font-black text-rose-500">${item.title}</div>
+          <div class="text-xs font-bold text-slate-800">${item.content}</div>
+          <div class="text-[10px] text-slate-400">${item.cn || ''}</div>
+        </div>
+      `).join('');
     }
 
     // 语音朗读 TTS
@@ -389,17 +430,19 @@
       loadTabContent();
     }
 
-    // 新增任务
+    // 新增任务 (增加持久化保存)
     function addCustomTask() {
       const name = document.getElementById('newTaskName').value;
       const stars = parseInt(document.getElementById('newTaskStars').value) || 1;
       if (!name) return;
 
-      LOCAL_DATA.tasks.push({
+      const customTasks = JSON.parse(localStorage.getItem('kids_custom_tasks') || '[]');
+      customTasks.push({
         id: Date.now(),
         task_name: name,
         reward_stars: stars
       });
+      localStorage.setItem('kids_custom_tasks', JSON.stringify(customTasks));
 
       document.getElementById('newTaskName').value = '';
       alert('新增任务成功！');
