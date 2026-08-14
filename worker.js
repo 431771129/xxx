@@ -19,7 +19,7 @@ export default {
       // 1. 获取用户信息
       if (path === "/api/profile" && method === "GET") {
         const profile = await env.DB.prepare("SELECT * FROM user_profile WHERE id = 1").first();
-        return new Response(JSON.stringify(profile || {}), { headers: corsHeaders });
+        return new Response(JSON.stringify(profile || { stars: 0, current_grade: 'preschool' }), { headers: corsHeaders });
       }
 
       // 2. 更新用户信息及星星
@@ -34,7 +34,12 @@ export default {
               speech_rate = COALESCE(?, speech_rate), 
               speech_pitch = COALESCE(?, speech_pitch) 
           WHERE id = 1
-        `).bind(stars, current_grade, speech_rate, speech_pitch).run();
+        `).bind(
+          stars ?? null, 
+          current_grade ?? null, 
+          speech_rate ?? null, 
+          speech_pitch ?? null
+        ).run();
 
         return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
       }
@@ -57,26 +62,29 @@ export default {
         }
 
         const { results } = await env.DB.prepare(query).bind(...params).all();
-        return new Response(JSON.stringify(results), { headers: corsHeaders });
+        return new Response(JSON.stringify(results || []), { headers: corsHeaders });
       }
 
       // 4. 获取任务列表
       if (path === "/api/tasks" && method === "GET") {
         const { results } = await env.DB.prepare("SELECT * FROM custom_tasks WHERE is_active = 1").all();
-        return new Response(JSON.stringify(results), { headers: corsHeaders });
+        return new Response(JSON.stringify(results || []), { headers: corsHeaders });
       }
 
       // 5. 新增打卡任务
       if (path === "/api/tasks" && method === "POST") {
         const { task_name, reward_stars } = await request.json();
-        await env.DB.prepare("INSERT INTO custom_tasks (task_name, reward_stars) VALUES (?, ?)").bind(task_name, reward_stars).run();
+        if (!task_name) {
+          return new Response(JSON.stringify({ error: "任务名称不能为空" }), { status: 400, headers: corsHeaders });
+        }
+        await env.DB.prepare("INSERT INTO custom_tasks (task_name, reward_stars) VALUES (?, ?)").bind(task_name, reward_stars || 1).run();
         return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
       }
 
       // 6. 获取奖励商城列表
       if (path === "/api/rewards" && method === "GET") {
         const { results } = await env.DB.prepare("SELECT * FROM rewards WHERE is_active = 1").all();
-        return new Response(JSON.stringify(results), { headers: corsHeaders });
+        return new Response(JSON.stringify(results || []), { headers: corsHeaders });
       }
 
       // 7. 兑换奖励扣减星星
@@ -84,7 +92,7 @@ export default {
         const { cost } = await request.json();
         const profile = await env.DB.prepare("SELECT stars FROM user_profile WHERE id = 1").first();
         
-        if (profile.stars < cost) {
+        if (!profile || profile.stars < cost) {
           return new Response(JSON.stringify({ error: "星星数量不足哦！" }), { status: 400, headers: corsHeaders });
         }
 
